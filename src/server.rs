@@ -28,7 +28,20 @@ impl OrderbookAggregator for AggregatorService {
         &self,
         _: Request<Empty>,
     ) -> Result<Response<Self::BookSummaryStream>, Status> {
-        unimplemented!()
+        let (mut tx, rx) = mpsc::channel(20);
+
+        tokio::spawn(async move {
+            for n in 0i32..20i32 {
+                let summary = Summary {
+                    spread: n as f64,
+                    bids: vec![],
+                    asks: vec![],
+                };
+                tx.send(Ok(summary)).await.unwrap();
+            }
+        });
+
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 }
 

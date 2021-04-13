@@ -21,5 +21,10 @@ use orderbook::{Empty, Level, Summary};
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut client = OrderbookAggregatorClient::connect("http://[::1]:10000").await?;
 
+    let mut  stream = client.book_summary(Request::new(Empty{})).await?.into_inner();
+
+    while let Some(summary) = stream.message().await? {
+    println!("SUMMARY = {:?}", summary);
+    }
      Ok(())
 }

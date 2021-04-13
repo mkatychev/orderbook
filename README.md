@@ -1,6 +1,6 @@
 
 ## Binance
-* Docs for Websocket connection: https://github.com/binance-"exchange"/binance-official-api-docs/blob/master/web-socket-streams.md 
+* Docs for Websocket connection: https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md
 * Example API feed: https://api.binance.com/api/v3/depth?symbol=ETHBTC
 * Websocket connection URL for Binance: wss://stream.binance.com:9443/ws/ethbtc@depth20@100ms
 
