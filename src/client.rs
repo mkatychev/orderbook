@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::{self, Write};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
@@ -20,11 +21,16 @@ use orderbook::{Empty, Level, Summary};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut client = OrderbookAggregatorClient::connect("http://[::1]:10000").await?;
+    let mut stdout = io::stdout();
 
-    let mut  stream = client.book_summary(Request::new(Empty{})).await?.into_inner();
+    let mut stream = client
+        .book_summary(Request::new(Empty {}))
+        .await?
+        .into_inner();
 
     while let Some(summary) = stream.message().await? {
-    println!("SUMMARY = {:?}", summary);
+        print!("\x1B[2J");
+        stdout.write_all(format!("SUMMARY = {:#?}", summary).as_bytes())?;
     }
-     Ok(())
+    Ok(())
 }
