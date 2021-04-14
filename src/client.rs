@@ -30,6 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     while let Some(summary) = stream.message().await? {
         print!("\x1B[2J");
+        println!("{:?}", std::time::Instant::now());
         stdout.write_all(format!("SUMMARY = {:#?}", summary).as_bytes())?;
     }
     Ok(())
