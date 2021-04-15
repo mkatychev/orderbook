@@ -82,7 +82,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             // zip vectors of asks and bids together
             for i in 0..len {
-                zip.push(vec![asks[i].price.to_string(), bids[i].price.to_string()]);
+                zip.push(vec![
+                    format!("{} - {}", asks[i].price.to_string(), asks[i].exchange),
+                    format!("{} - {}", bids[i].price.to_string(), asks[i].exchange),
+                ]);
             }
             let rows = zip.iter().map(|item| {
                 let height = item
