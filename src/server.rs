@@ -42,7 +42,7 @@ impl OrderbookAggregator for AggregatorService {
 
         let summary_state = Arc::clone(&self.summary);
         let stream = interval.map(move |_| Ok(summary_state.clone().read()));
-        Ok(ResponseStream::new(Box::pin(stream)))
+        Ok(Response::new(Box::pin(stream)))
     }
 }
 
