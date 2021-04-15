@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc};
 
-use futures::{Stream, StreamExt};
+use futures::{future::IntoFuture, Future, Stream, StreamExt};
 use tokio::{
     sync::{mpsc, RwLock},
     time,
@@ -36,10 +36,10 @@ impl OrderbookAggregator for AggregatorService {
     ) -> Result<Response<Self::BookSummaryStream>, Status> {
         let interval = IntervalStream::new(time::interval(time::Duration::from_millis(400)));
 
-        let stream = interval.map(move |_| Ok::<_, Status>(self.arc_summary()));
+        let summary = Arc::clone(&self.summary).read().await.clone();
+        let stream = interval.map(move |_| Ok::<_, Status>(summary.clone()));
 
-        Ok(Response::new(Pin::new(Box::new::(stream.into()))))
-        // Ok(Response::new(Box::pin(stream.next().await.ok_or(|x| x).map_err(|e| Status::unknown(e.into()))?))
+        Ok(Response::new(Box::pin(stream)))
     }
 }
 
@@ -47,6 +47,7 @@ impl AggregatorService {
     pub async fn arc_summary(&self) -> Summary {
         Arc::clone(&self.summary).read().await.clone()
     }
+
     pub async fn process_batch(
         stale_summary: Arc<RwLock<Summary>>,
         exchanges: Arc<HashMap<String, RwLock<Summary>>>,

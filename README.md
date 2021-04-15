@@ -25,6 +25,7 @@
 
 * Running server and client:
 
-1. Server: `cargo run --bin orderbook-server`
+1. Server: `cargo run --bin orderbook-server -- --pair ethbtc`
+
 1. Client: `cargo run --bin orderbook-client`
 
