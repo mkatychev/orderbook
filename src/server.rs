@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc};
 
-use futures::{executor::block_on_stream, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use tokio::{
     sync::{mpsc, RwLock},
     time,
@@ -27,10 +27,6 @@ pub struct AggregatorService {
 
 #[tonic::async_trait]
 impl OrderbookAggregator for AggregatorService {
-    // type Item = Result<Summary, Status>;
-    // type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    // type BookSummaryStream = StreamExt<Result<Summary, Status>>;
     type BookSummaryStream =
         Pin<Box<dyn Stream<Item = Result<Summary, Status>> + Unpin + Send + Sync>>;
 
@@ -38,15 +34,19 @@ impl OrderbookAggregator for AggregatorService {
         &self,
         _: Request<Empty>,
     ) -> Result<Response<Self::BookSummaryStream>, Status> {
-        let mut interval = IntervalStream::new(time::interval(time::Duration::from_millis(400)));
+        let interval = IntervalStream::new(time::interval(time::Duration::from_millis(400)));
 
-        let summary_state = Arc::clone(&self.summary);
-        let stream = interval.map(move |_| Ok(summary_state.clone().read()));
-        Ok(Response::new(Box::pin(stream)))
+        let stream = interval.map(move |_| Ok::<_, Status>(self.arc_summary()));
+
+        Ok(Response::new(Pin::new(Box::new::(stream.into()))))
+        // Ok(Response::new(Box::pin(stream.next().await.ok_or(|x| x).map_err(|e| Status::unknown(e.into()))?))
     }
 }
 
 impl AggregatorService {
+    pub async fn arc_summary(&self) -> Summary {
+        Arc::clone(&self.summary).read().await.clone()
+    }
     pub async fn process_batch(
         stale_summary: Arc<RwLock<Summary>>,
         exchanges: Arc<HashMap<String, RwLock<Summary>>>,
