@@ -1,8 +1,8 @@
-use std::{collections::HashMap, error::Error, sync::Arc, thread};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
 use async_std::sync::RwLock;
 use futures::StreamExt;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -32,6 +32,7 @@ impl OrderbookAggregator for AggregatorService {
         _: Request<Empty>,
     ) -> Result<Response<Self::BookSummaryStream>, Status> {
         let (tx, rx) = mpsc::channel(1);
+        let mut interval = time::interval(time::Duration::from_millis(400));
 
         let summary_state = Arc::clone(&self.summary);
         tokio::spawn(async move {
@@ -41,7 +42,7 @@ impl OrderbookAggregator for AggregatorService {
                     println!("ERROR: {}", e.to_string());
                     break;
                 };
-                thread::sleep(std::time::Duration::from_millis(400));
+                interval.tick().await;
             }
         });
 
