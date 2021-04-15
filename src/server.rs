@@ -1,9 +1,11 @@
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc};
 
-use async_std::sync::RwLock;
-use futures::StreamExt;
-use tokio::{sync::mpsc, time};
-use tokio_stream::wrappers::ReceiverStream;
+use futures::{executor::block_on_stream, Stream, StreamExt};
+use tokio::{
+    sync::{mpsc, RwLock},
+    time,
+};
+use tokio_stream::wrappers::{IntervalStream, ReceiverStream};
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::ws::*;
@@ -25,28 +27,22 @@ pub struct AggregatorService {
 
 #[tonic::async_trait]
 impl OrderbookAggregator for AggregatorService {
-    type BookSummaryStream = ReceiverStream<Result<Summary, Status>>;
+    // type Item = Result<Summary, Status>;
+    // type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    // type BookSummaryStream = StreamExt<Result<Summary, Status>>;
+    type BookSummaryStream =
+        Pin<Box<dyn Stream<Item = Result<Summary, Status>> + Unpin + Send + Sync>>;
 
     async fn book_summary(
         &self,
         _: Request<Empty>,
     ) -> Result<Response<Self::BookSummaryStream>, Status> {
-        let (tx, rx) = mpsc::channel(1);
-        let mut interval = time::interval(time::Duration::from_millis(400));
+        let mut interval = IntervalStream::new(time::interval(time::Duration::from_millis(400)));
 
         let summary_state = Arc::clone(&self.summary);
-        tokio::spawn(async move {
-            loop {
-                let summary = summary_state.read().await;
-                if let Err(e) = tx.send(Ok(summary.clone())).await {
-                    println!("ERROR: {}", e.to_string());
-                    break;
-                };
-                interval.tick().await;
-            }
-        });
-
-        Ok(Response::new(ReceiverStream::new(rx)))
+        let stream = interval.map(move |_| Ok(summary_state.clone().read()));
+        Ok(ResponseStream::new(Box::pin(stream)))
     }
 }
 
@@ -151,9 +147,27 @@ impl AggregatorService {
     }
 }
 
+const SERVER_ARGS_ERR: &str =
+    "error: server must run with these args - 'server --pair <currency-pair>'";
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let addr = "[::1]:10000".parse().unwrap();
+
+    let args: Vec<String> = std::env::args().collect();
+    let curreny_pair = match args.len() {
+        3 => {
+            if args[1] != "--pair" {
+                eprintln!("{}", SERVER_ARGS_ERR);
+                std::process::exit(1);
+            }
+            args[2].to_owned()
+        }
+        _ => {
+            eprintln!("{}", SERVER_ARGS_ERR);
+            std::process::exit(1);
+        }
+    };
 
     let mut exchanges: HashMap<String, RwLock<Summary>> = HashMap::new();
     exchanges.insert("binance".into(), RwLock::new(Summary::default()));
@@ -172,7 +186,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::select! {
         // exchange clients
         res = async {
-            ws::binance_client(tx.clone(), "ethbtc").await?;
+            ws::binance_client(tx.clone(),&curreny_pair).await?;
             Ok::<_, Box<dyn Error>>(())
         } => {
             println!("done!");
@@ -180,7 +194,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
 
         res = async {
-            ws::bitstamp_client(tx.clone(), "ethbtc").await?;
+            ws::bitstamp_client(tx.clone(),&curreny_pair).await?;
             Ok::<_, Box<dyn Error>>(())
         } => {
             println!("done!");
