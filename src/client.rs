@@ -53,6 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?
         .into_inner();
 
+    print!("\x1B[2J"); // clear the screen first
     while let Some(summary) = stream.message().await? {
         if let Event::Input(key) = events.next()? {
             {

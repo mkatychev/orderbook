@@ -1,10 +1,8 @@
 use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc};
 
 use futures::{future::IntoFuture, Future, Stream, StreamExt};
-use tokio::{
-    sync::{mpsc, RwLock},
-    time,
-};
+use std::sync::RwLock;
+use tokio::{sync::mpsc, time};
 use tokio_stream::wrappers::{IntervalStream, ReceiverStream};
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -36,16 +34,16 @@ impl OrderbookAggregator for AggregatorService {
     ) -> Result<Response<Self::BookSummaryStream>, Status> {
         let interval = IntervalStream::new(time::interval(time::Duration::from_millis(400)));
 
-        let summary = Arc::clone(&self.summary).read().await.clone();
-        let stream = interval.map(move |_| Ok::<_, Status>(summary.clone()));
-
+        let summary_state = Arc::clone(&self.summary);
+        let stream =
+            interval.map(move |_| Ok::<Summary, Status>(summary_state.read().unwrap().clone()));
         Ok(Response::new(Box::pin(stream)))
     }
 }
 
 impl AggregatorService {
     pub async fn arc_summary(&self) -> Summary {
-        Arc::clone(&self.summary).read().await.clone()
+        Arc::clone(&self.summary).read().unwrap().clone()
     }
 
     pub async fn process_batch(
@@ -93,7 +91,7 @@ impl AggregatorService {
                     .get(&batch.exchange)
                     .ok_or_else(|| format!("missing exchange name: {}", &batch.exchange))?
                     .write()
-                    .await;
+                    .unwrap();
                 exchange.bids = bids;
                 exchange.asks = asks;
             }
@@ -118,7 +116,7 @@ impl AggregatorService {
 
         // pool all exchange orderbooks into one bloated summary
         for (_k, v) in exchanges.iter() {
-            let exchange = v.read().await;
+            let exchange = v.read().unwrap();
             for bid in exchange.bids.iter() {
                 summary.bids.push(bid.clone());
             }
@@ -143,7 +141,7 @@ impl AggregatorService {
             summary.spread = summary.asks[0].price - summary.bids[0].price;
         }
 
-        let mut swap_summary = stale_summary.write().await;
+        let mut swap_summary = stale_summary.write().unwrap();
         *swap_summary = summary;
     }
 }
