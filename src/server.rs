@@ -128,7 +128,7 @@ impl AggregatorService {
         summary // sort in descending order for bids, we want the highest bids
             .bids
             .sort_by(|a, b| b.price.partial_cmp(&a.price).unwrap());
-        summary // sort in descending order for bids, we want the highest bids
+        summary // sort in ascending order for bids, we want the lowest asks
             .asks
             .sort_by(|a, b| a.price.partial_cmp(&b.price).unwrap());
 
@@ -154,7 +154,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let addr = "[::1]:10000".parse().unwrap();
 
     let args: Vec<String> = std::env::args().collect();
-    let curreny_pair = match args.len() {
+    let currency_pair = match args.len() {
         3 => {
             if args[1] != "--pair" {
                 eprintln!("{}", SERVER_ARGS_ERR);
@@ -185,7 +185,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::select! {
         // exchange clients
         res = async {
-            ws::binance_client(tx.clone(),&curreny_pair).await?;
+            ws::binance_client(tx.clone(),&currency_pair).await?;
             Ok::<_, Box<dyn Error>>(())
         } => {
             println!("done!");
@@ -193,14 +193,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
 
         res = async {
-            ws::bitstamp_client(tx.clone(),&curreny_pair).await?;
+            ws::bitstamp_client(tx.clone(),&currency_pair).await?;
             Ok::<_, Box<dyn Error>>(())
         } => {
             println!("done!");
             res?;
         }
 
-        // process exchanes
+        // process exchanges
         res = async {
             AggregatorService::process_batch(summary_state.clone(), exchange_state.clone(), ReceiverStream::new(rx)).await?;
             Ok::<_, Box<dyn Error>>(())

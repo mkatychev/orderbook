@@ -124,7 +124,7 @@ pub async fn bitstamp_client(tx: Sender<OrderBatch>, symbol: &str) -> Result<(),
                 continue;
             }
         };
-        // verified that api sorts bids and asks inversely, cannot slimit depth request
+        // verified that api sorts bids and asks inversely, cannot limit depth request
         // smallest indices have greatest value for asks and bids
         batch.data.bids.truncate(10);
         batch.data.asks.truncate(10);
