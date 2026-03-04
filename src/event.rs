@@ -1,8 +1,9 @@
 use std::{
     io,
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc,
+        mpsc,
     },
     thread,
     time::Duration,
@@ -18,22 +19,22 @@ pub enum Event<I> {
 /// A small event handler that wrap termion input and tick events. Each event
 /// type is handled in its own thread and returned to a common `Receiver`
 pub struct Events {
-    rx:              mpsc::Receiver<Event<Key>>,
-    input_handle:    thread::JoinHandle<()>,
-    ignore_exit_key: Arc<AtomicBool>,
-    tick_handle:     thread::JoinHandle<()>,
+    rx: mpsc::Receiver<Event<Key>>,
+    _input_handle: thread::JoinHandle<()>,
+    _ignore_exit_key: Arc<AtomicBool>,
+    _tick_handle: thread::JoinHandle<()>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
-    pub exit_key:  Key,
+    pub exit_key: Key,
     pub tick_rate: Duration,
 }
 
 impl Default for Config {
     fn default() -> Config {
         Config {
-            exit_key:  Key::Char('q'),
+            exit_key: Key::Char('q'),
             tick_rate: Duration::from_millis(250),
         }
     }
@@ -64,18 +65,20 @@ impl Events {
             })
         };
         let tick_handle = {
-            thread::spawn(move || loop {
-                if tx.send(Event::Tick).is_err() {
-                    break;
+            thread::spawn(move || {
+                loop {
+                    if tx.send(Event::Tick).is_err() {
+                        break;
+                    }
+                    thread::sleep(config.tick_rate);
                 }
-                thread::sleep(config.tick_rate);
             })
         };
         Events {
             rx,
-            ignore_exit_key,
-            input_handle,
-            tick_handle,
+            _ignore_exit_key: ignore_exit_key,
+            _input_handle: input_handle,
+            _tick_handle: tick_handle,
         }
     }
 

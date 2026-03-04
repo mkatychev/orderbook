@@ -1,9 +1,9 @@
+use futures_util::{SinkExt, StreamExt};
 use serde::{de, Deserialize, Deserializer};
 use serde_json::from_str;
 use std::error::Error;
 use tokio::sync::mpsc::Sender;
-use tungstenite::connect;
-use url::Url;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 // OrderBatch represents the normalised struct meant to be sent for processing by the
 // AggregatorSerivce
@@ -40,15 +40,19 @@ impl<'de> Deserialize<'de> for Order {
         let helper: OrderHelper = Deserialize::deserialize(deserializer)?;
         Ok(Self {
             price:    helper.0.parse().map_err(de::Error::custom)?,
-            quantity: helper.0.parse().map_err(de::Error::custom)?,
+            quantity: helper.1.parse().map_err(de::Error::custom)?,
         })
     }
 }
 
 pub async fn binance_client(tx: Sender<OrderBatch>, symbol: &str) -> Result<(), Box<dyn Error>> {
-    let (mut socket, response) = connect(Url::parse(
-        format!("wss://stream.binance.com:9443/ws/{}@depth20@100ms", symbol).as_ref(),
-    )?)?;
+    // Use BINANCE_WS_URL env var if set, otherwise default to testnet (main API is geo-restricted)
+    let base_url = std::env::var("BINANCE_WS_URL")
+        .unwrap_or_else(|_| "wss://stream.testnet.binance.vision/ws".to_string());
+    let url = format!("{}/{}@depth20@100ms", base_url, symbol);
+    println!("[BINANCE] Connecting to: {}", url);
+
+    let (ws_stream, response) = connect_async(&url).await?;
 
     println!("[BINANCE] Connected to the server");
     println!("[BINANCE] Response HTTP code: {}", response.status());
@@ -57,8 +61,10 @@ pub async fn binance_client(tx: Sender<OrderBatch>, symbol: &str) -> Result<(), 
         println!("* {}", &header);
     }
 
-    loop {
-        let msg = socket.read_message()?.into_text()?;
+    let (_write, mut read) = ws_stream.split();
+
+    while let Some(msg) = read.next().await {
+        let msg = msg?.into_text()?;
         let batch = match from_str::<BinanceOrderBatch>(&msg) {
             Ok(m) => m,
             Err(_) => {
@@ -74,6 +80,8 @@ pub async fn binance_client(tx: Sender<OrderBatch>, symbol: &str) -> Result<(), 
         })
         .await?;
     }
+
+    Ok(())
 }
 
 #[derive(Deserialize, Debug)]
@@ -96,7 +104,7 @@ pub struct Data {
 }
 
 pub async fn bitstamp_client(tx: Sender<OrderBatch>, symbol: &str) -> Result<(), Box<dyn Error>> {
-    let (mut socket, response) = connect(Url::parse("wss://ws.bitstamp.net/")?)?;
+    let (ws_stream, response) = connect_async("wss://ws.bitstamp.net/").await?;
 
     println!("[BITSTAMP] Connected to the server");
     println!("[BITSTAMP] Response HTTP code: {}", response.status());
@@ -105,21 +113,21 @@ pub async fn bitstamp_client(tx: Sender<OrderBatch>, symbol: &str) -> Result<(),
         println!("* {}", &header);
     }
 
-    // https://www.bitstamp.net/websocket/v2/
-    socket.write_message(
-        format!(
-            r#"{{"event":"bts:subscribe","data":{{"channel":"order_book_{}"}}}}"#,
-            symbol
-        )
-        .into(),
-    )?;
+    let (mut write, mut read) = ws_stream.split();
 
-    loop {
-        let msg = socket.read_message()?.into_text()?;
+    // https://www.bitstamp.net/websocket/v2/
+    let subscribe_msg = format!(
+        r#"{{"event":"bts:subscribe","data":{{"channel":"order_book_{}"}}}}"#,
+        symbol
+    );
+    write.send(Message::Text(subscribe_msg.into())).await?;
+
+    while let Some(msg) = read.next().await {
+        let msg = msg?.into_text()?;
         let mut batch = match from_str::<BitstampOrderBatch>(&msg) {
             Ok(m) => m,
             Err(_) => {
-                // sometimes the binance ws sends out the timestamp?
+                // sometimes bitstamp sends subscription confirmations
                 println!("[BITSTAMP] non batch message: {}", &msg);
                 continue;
             }
@@ -135,4 +143,6 @@ pub async fn bitstamp_client(tx: Sender<OrderBatch>, symbol: &str) -> Result<(),
         })
         .await?;
     }
+
+    Ok(())
 }
