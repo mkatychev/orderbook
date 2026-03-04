@@ -3,11 +3,11 @@ use std::{
     error::Error,
     io::{self},
 };
-use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
+use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
     backend::TermionBackend,
     layout::{Constraint, Layout},
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     widgets::{Block, Borders, Cell, Row, Table, TableState},
     Terminal,
 };
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     print!("\x1B[2J"); // clear the screen first
     while let Some(summary) = stream.message().await? {
-        if let Event::Input(key) = events.next()? {
+        if let Event::Input(_key) = events.next()? {
             {
                 break;
             }

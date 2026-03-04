@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc};
 
-use futures::{future::IntoFuture, Future, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use std::sync::RwLock;
 use tokio::{sync::mpsc, time};
 use tokio_stream::wrappers::{IntervalStream, ReceiverStream};
